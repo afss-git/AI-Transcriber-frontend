@@ -20,17 +20,23 @@ export function useAI() {
     isLoading.value   = true
 
     try {
-      const res = await $fetch<{ reply: string }>(`${apiBase}/api/ai/chat`, {
+      const raw = await fetch(`${apiBase}/api/ai/chat`, {
         method: 'POST',
-        body: {
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           transcript,
           history: chatHistory.value.slice(0, -1),
           message,
-        },
+        }),
       })
+      if (!raw.ok) {
+        const detail = await raw.json().catch(() => ({}))
+        throw new Error(detail?.detail || `Server error ${raw.status}`)
+      }
+      const res: { reply: string } = await raw.json()
       chatHistory.value = [...chatHistory.value, { role: 'assistant', content: res.reply }]
     } catch (e: any) {
-      const msg = e?.data?.detail || e?.message || 'AI request failed.'
+      const msg = e?.message || 'AI request failed.'
       chatHistory.value = [...chatHistory.value, { role: 'assistant', content: `❌ ${msg}` }]
       aiError.value = msg
     } finally {

@@ -39,16 +39,21 @@ export function useTranscriber() {
     body.append('key_terms',    opts.keyTerms)
 
     try {
-      const res = await $fetch<{ job_id: string }>(`${apiBase}/api/transcribe`, {
-        method: 'POST',
-        body,
-      })
+      // Use native fetch — more reliable with FormData than $fetch
+      const raw = await fetch(`${apiBase}/api/transcribe`, { method: 'POST', body })
+      if (!raw.ok) {
+        const detail = await raw.json().catch(() => ({}))
+        throw new Error(detail?.detail || `Server error ${raw.status}`)
+      }
+      const res: { job_id: string } = await raw.json()
       jobId.value    = res.job_id
       status.value   = 'transcribing'
       _startPolling()
     } catch (e: any) {
       status.value = 'error'
-      error.value  = e?.data?.detail || e?.message || 'Upload failed. Check the server is running.'
+      error.value  = e?.message?.includes('fetch')
+        ? 'Cannot reach server. It may be waking up — wait 30s and try again.'
+        : (e?.message || 'Upload failed.')
     }
   }
 
@@ -57,7 +62,8 @@ export function useTranscriber() {
     pollTimer = setInterval(async () => {
       if (!jobId.value) return
       try {
-        const job = await $fetch<any>(`${apiBase}/api/job/${jobId.value}`)
+        const r = await fetch(`${apiBase}/api/job/${jobId.value}`)
+        const job = await r.json()
         progress.value      = job.progress ?? 0
         progressDone.value  = job.done     ?? 0
         progressTotal.value = job.total    ?? 0
