@@ -63,6 +63,12 @@ export function useTranscriber() {
       if (!jobId.value) return
       try {
         const r = await fetch(`${apiBase}/api/job/${jobId.value}`)
+        if (r.status === 404) {
+          status.value = 'error'
+          error.value  = 'Server restarted mid-job. Please upload your file again.'
+          _stopPolling()
+          return
+        }
         const job = await r.json()
         progress.value      = job.progress ?? 0
         progressDone.value  = job.done     ?? 0
@@ -79,7 +85,7 @@ export function useTranscriber() {
           _stopPolling()
         }
       } catch {
-        // silently retry
+        // silently retry on network blip
       }
     }, 2000)
   }
