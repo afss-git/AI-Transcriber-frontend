@@ -129,6 +129,12 @@ watch(status, (s) => {
   if (s === 'completed') activeTab.value = 'transcript'
 })
 
+// Ping server on page load so it wakes up before the user uploads
+onMounted(() => {
+  const config  = useRuntimeConfig()
+  fetch(`${config.public.apiBase}/`).catch(() => {})
+})
+
 // Auto-scroll chat to bottom
 const chatEl = ref<HTMLElement | null>(null)
 watch(chatHistory, async () => {
