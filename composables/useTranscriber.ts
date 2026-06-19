@@ -38,9 +38,25 @@ export function useTranscriber() {
     body.append('task',         opts.task)
     body.append('key_terms',    opts.keyTerms)
 
+    // Show waking-up message after 6s if still waiting
+    const wakeTimer = setTimeout(() => {
+      if (status.value === 'uploading')
+        error.value = '⏳ Server is waking up — free tier sleeps when idle. Usually takes 20–40s...'
+    }, 6000)
+
     try {
-      // Use native fetch — more reliable with FormData than $fetch
-      const raw = await fetch(`${apiBase}/api/transcribe`, { method: 'POST', body })
+      const controller = new AbortController()
+      const timeoutId  = setTimeout(() => controller.abort(), 90000) // 90s max
+
+      const raw = await fetch(`${apiBase}/api/transcribe`, {
+        method: 'POST',
+        body,
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+      clearTimeout(wakeTimer)
+      error.value = ''
+
       if (!raw.ok) {
         const detail = await raw.json().catch(() => ({}))
         throw new Error(detail?.detail || `Server error ${raw.status}`)
@@ -50,10 +66,13 @@ export function useTranscriber() {
       status.value   = 'transcribing'
       _startPolling()
     } catch (e: any) {
+      clearTimeout(wakeTimer)
       status.value = 'error'
-      error.value  = e?.message?.includes('fetch')
-        ? 'Cannot reach server. It may be waking up — wait 30s and try again.'
-        : (e?.message || 'Upload failed.')
+      if ((e as any)?.name === 'AbortError') {
+        error.value = 'Server took too long to respond. Try again — it should be awake now.'
+      } else {
+        error.value = e?.message || 'Upload failed. Check your connection and try again.'
+      }
     }
   }
 
